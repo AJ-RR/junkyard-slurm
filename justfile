@@ -57,7 +57,7 @@ _user        := env("USER")
 build_rootfs debootstrap_release="stable" root_password="0000" hostname="fold":
   # First stage 
   sudo rm -rf {{_sysroot_dir}}
-  mkdir {{_sysroot_dir}}
+  sudo mkdir {{_sysroot_dir}}
 
   sudo debootstrap \
     --variant=minbase \
@@ -66,30 +66,28 @@ build_rootfs debootstrap_release="stable" root_password="0000" hostname="fold":
     {{_sysroot_dir}}
 
   # Second stage
-  sudo chroot {{_sysroot_dir}} debootstrap/debootstrap --second-stage
-  sudo chroot {{_sysroot_dir}} symlinks -cr .
+  sudo systemd-nspawn -D {{_sysroot_dir}} debootstrap/debootstrap --second-stage
+  sudo systemd-nspawn -D {{_sysroot_dir}} symlinks -cr .
   
   # Set password
-  sudo chroot {{_sysroot_dir}} sh -c "echo "root:{{root_password}}" | chpasswd"
+  sudo systemd-nspawn -D {{_sysroot_dir}} sh -c "echo "root:{{root_password}}" | chpasswd"
   # Set hostname
-  sudo chroot {{_sysroot_dir}} sh -c "echo {{hostname}} > /etc/hostname"
-
-  sudo chown -R {{_user}}:{{_user}} {{_sysroot_dir}}
+  sudo systemd-nspawn -D {{_sysroot_dir}} sh -c "echo {{hostname}} > /etc/hostname"
 
 [group('rootfs')]
 [working-directory: 'rootfs']
 install_apt_packages:
   # Setup locale
-  sudo chroot {{_sysroot_dir}} sh -c \
+  sudo systemd-nspawn -D {{_sysroot_dir}} sh -c \
     "DEBIAN_FRONTEND=noninteractive apt-get -y install locales apt-utils"
-  sudo chroot {{_sysroot_dir}} sh -c \
+  sudo systemd-nspawn -D {{_sysroot_dir}} sh -c \
     "export DEBIAN_FRONTEND=noninteractive; \
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
     && dpkg-reconfigure locales \
     && update-locale en_US.UTF-8"
 
   # Actually install packages
-  sudo chroot {{_sysroot_dir}} sh -c \
+  sudo systemd-nspawn -D {{_sysroot_dir}} sh -c \
     "DEBIAN_FRONTEND=noninteractive apt-get -y install {{_apt_packages}}"
 
 _module_order_path := join(justfile_directory(), "rootfs", "module_order.txt")
@@ -98,12 +96,12 @@ _module_order_path := join(justfile_directory(), "rootfs", "module_order.txt")
 [group('rootfs')]
 [working-directory: 'rootfs']
 update_kernel_modules_and_source:
-  mkdir -p {{_sysroot_dir}}/lib/modules/{{_kernel_version}}
-  cp {{_kernel_build_dir}}/modules.builtin {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/
-  cp {{_kernel_build_dir}}/modules.builtin.modinfo {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/
+  sudo mkdir -p {{_sysroot_dir}}/lib/modules/{{_kernel_version}}
+  sudo cp {{_kernel_build_dir}}/modules.builtin {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/
+  sudo cp {{_kernel_build_dir}}/modules.builtin.modinfo {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/
 
-  rm -f {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/modules.order
-  touch {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/modules.order
+  sudo rm -f {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/modules.order
+  sudo touch {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/modules.order
   
   @echo "Copying modules"
   for staging in vendor_dlkm system_dlkm; \
@@ -112,29 +110,30 @@ update_kernel_modules_and_source:
     tar \
       -xvzf {{_kernel_build_dir}}/"$staging"_staging_archive.tar.gz \
       -C unpack/"$staging"; \
-    {{_rsync}} -avK --ignore-existing  --include='*/' --include='*.ko' --exclude='*' unpack/"$staging"/ {{_sysroot_dir}}/; \
-    cat unpack/"$staging"/lib/modules/{{_kernel_version}}/modules.order \
-      >> {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/modules.order; \
+    sudo {{_rsync}} -avK --ignore-existing  --include='*/' --include='*.ko' --exclude='*' unpack/"$staging"/ {{_sysroot_dir}}/; \
+    sudo sh -c "cat unpack/\"$staging\"/lib/modules/{{_kernel_version}}/modules.order \
+      >> {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/modules.order"; \
   done
 
   @echo "Updating System.map"
-  cp {{_kernel_build_dir}}/System.map {{_sysroot_dir}}/boot/System.map-{{_kernel_version}}
+  sudo cp {{_kernel_build_dir}}/System.map {{_sysroot_dir}}/boot/System.map-{{_kernel_version}}
 
   @echo "Updating module dependencies"
-  sudo chroot {{_sysroot_dir}} depmod \
+  sudo systemd-nspawn -D {{_sysroot_dir}} depmod \
     --errsyms \
     --all \
     --filesyms /boot/System.map-{{_kernel_version}} \
     {{_kernel_version}}
 
   @echo "Copying kernel headers"
+  mkdir -p unpack/kernel_headers
   tar \
     -xvzf {{_kernel_build_dir}}/kernel-headers.tar.gz \
     -C unpack/kernel_headers
-  cp -r unpack/kernel_headers {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}}
-  ln -rsf {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}} {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/build
-  cp {{_kernel_build_dir}}/kernel_aarch64_Module.symvers {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}}/
-  cp {{_kernel_build_dir}}/vmlinux.symvers {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}}/
+  sudo cp -r unpack/kernel_headers {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}}
+  sudo ln -rsf {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}} {{_sysroot_dir}}/lib/modules/{{_kernel_version}}/build
+  sudo cp {{_kernel_build_dir}}/kernel_aarch64_Module.symvers {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}}/
+  sudo cp {{_kernel_build_dir}}/vmlinux.symvers {{_sysroot_dir}}/usr/src/linux-headers-{{_kernel_version}}/
 
   @echo "Setting systemd module load order"
   rm -f {{_module_order_path}}
@@ -162,7 +161,7 @@ _module_order   := replace(read(_module_order_path), "\n", " ")
 
 [working-directory: 'rootfs']
 update_initramfs:
-  sudo chroot {{_sysroot_dir}} dracut \
+  sudo systemd-nspawn -D {{_sysroot_dir}} dracut \
     --kver {{_kernel_version}} \
     --lz4 \
     --show-modules \
