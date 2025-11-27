@@ -1,0 +1,5 @@
+# Ignore every file in this folder
+*
+# Except these
+!.gitignore
+!kernel_version

@@ -5,10 +5,24 @@ Automated flow for
 * Building initramfs
 * TODO: etc...
 
-## Requirements
+## Requirements to kernel/images:
+For both kernel/image building:
 * [just](https://github.com/casey/just)
+* rsync
+
+For only kernel building:
 * [repo](https://source.android.com/docs/setup/download/source-control-tools)
-* qemu-user-static
+* x86_64 system required to build kernel
+* Patience (this takes a *while*)
+
+For only image building:
+* arm64 system can be used to build images, qemu-user-static required for x86_64 to build images
+* Debian stable
+* mmdebstrap
+* systemd-nspawn
+* btrfs-progs
+* fallocate
+* Kernel artifacts in kernel/out (either build it or download latest kernel artifact if you're just playing with the image)
 
 ## TODO
 * Proper fstab
@@ -28,7 +42,6 @@ Add/remove packages in [packages.txt](rootfs/packages.txt). **Specify one packag
 just clone_kernel_source
 just build_kernel
 just build_rootfs <debootstrap_release="stable"> <root_password="0000"> <hostname="fold">
-just install_apt_packages
 just update_kernel_modules_and_source
 just update_initramfs
 just create_rootfs_image <size="4GiB">

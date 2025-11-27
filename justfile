@@ -6,15 +6,7 @@ _apt_packages := replace(read(join("rootfs", "packages.txt")), "\n", " ")
 # Tools
 
 [private]
-_repo := require("repo")
-[private]
-_debootstrap := require("debootstrap")
-[private]
 _rsync := require("rsync")
-[private]
-_fallocate := require("fallocate")
-[private]
-_mkfs_btrfs := require("mkfs.btrfs")
 [private]
 _mkbootimg := join(justfile_directory(), "tools", "mkbootimg", "mkbootimg.py")
 [private]
@@ -28,16 +20,16 @@ default:
 [working-directory('kernel/source')]
 clone_kernel_source android_kernel_branch="android-gs-felix-6.1-android16":
     @echo "Cloning Android kernel from branch: {{ android_kernel_branch }}"
-    {{ _repo }} init \
+    repo init \
       --depth=1 \
       -u https://android.googlesource.com/kernel/manifest \
       -b {{ android_kernel_branch }}
-    {{ _repo }} sync -j {{ num_cpus() }}
+    repo sync -j {{ num_cpus() }}
 
 [private]
-_kernel_build_dir := join(justfile_directory(), "kernel", "source", "out", "felix", "dist")
+_kernel_build_dir := join(justfile_directory(), "kernel", "out")
 [private]
-_kernel_version := trim(read(join("kernel", "kernel_version")))
+_kernel_version := trim(read(join("kernel", "out", "kernel_version")))
 
 [group('kernel')]
 [working-directory('kernel/source')]
@@ -54,12 +46,12 @@ build_kernel: clone_kernel_source
       --config=felix \
       --defconfig_fragment=//custom_defconfig_mod:custom_defconfig \
       //private/devices/google/felix:gs201_felix_dist
-
+    mv ./out/felix/dist/* ../out/
     @echo "Updating kernel version string"
     strings {{ join(_kernel_build_dir, "Image") }} \
       | grep "Linux version" \
       | head -n 1 \
-      | awk '{print $3}' > kernel_version
+      | awk '{print $3}' > ../out/kernel_version
 
 [private]
 _sysroot_img := join(justfile_directory(), "boot", "rootfs.img")
@@ -95,21 +87,27 @@ clean_rootfs: _unmount_rootfs
 [group('rootfs')]
 [working-directory('rootfs')]
 _build_rootfs debootstrap_release root_password hostname size:
-    # First stage
-    sudo debootstrap \
-      --variant=minbase \
-      --include=symlinks \
-      --arch=arm64 --foreign {{ debootstrap_release }} \
+    # why does debian have this one package in everything BUT trixie...
+    wget -P /tmp 'http://ftp.debian.org/debian/pool/main/k/kmscon/kmscon_9.0.0-5+b2_arm64.deb'
+    sudo DEBIAN_FRONTEND=noninteractive mmdebstrap \
+      --variant=standard \
+      --arch=arm64 {{ debootstrap_release }} \
+      --include="locales apt-utils {{ _apt_packages }}" \
+      --include="/tmp/kmscon_9.0.0-5+b2_arm64.deb" \
+      --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \
+      --customize-hook='echo {{ hostname }} > "$1/etc/hostname"' \
+      --customize-hook='echo root:{{ root_password }} | chpasswd -R "$1"' \
+      --customize-hook='useradd -R "$1" -m -s /bin/bash -G sudo kalm' \
+      --customize-hook='echo kalm:0000 | chpasswd -R "$1"' \
+      --customize-hook='echo "%sudo ALL=(ALL) NOPASSWD:ALL" >"$1/etc/sudoers.d/99-sudo-nopasswd"' \
+      --customize-hook="sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \"\$1/etc/locale.gen\" && chroot \"\$1\" dpkg-reconfigure locales && chroot \"\$1\" update-locale en_US.UTF-8" \
+      --customize-hook="sed -i \
+        -e 's/^#HandleLidSwitch=.*/HandleLidSwitch=ignore/' \
+        -e 's/^#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=ignore/' \
+        -e 's/^#HandleLidSwitchDocked=.*/HandleLidSwitchDocked=ignore/' \
+        \"\$1/etc/systemd/logind.conf\"" \
+      --customize-hook='mkdir -p "$1/etc/systemd/system/kmsconvt@.service.d" && printf "[Service]\nExecStart=\nExecStart=/usr/bin/kmscon \"--vt=%%I\" --seats=seat0 --no-switchvt --login -- /sbin/agetty -a kalm - xterm-256color\n" > "$1/etc/systemd/system/kmsconvt@.service.d/override.conf"' \
       {{ _sysroot_dir }}
-
-    # Second stage
-    sudo systemd-nspawn -D {{ _sysroot_dir }} debootstrap/debootstrap --second-stage
-    sudo systemd-nspawn -D {{ _sysroot_dir }} symlinks -cr .
-
-    # Set password
-    sudo systemd-nspawn -D {{ _sysroot_dir }} sh -c "echo root:{{ root_password }} | chpasswd"
-    # Set hostname
-    sudo systemd-nspawn -D {{ _sysroot_dir }} sh -c "echo {{ hostname }} > /etc/hostname"
 
     touch {{ _rootfs_built_sentinel }}
 
@@ -121,29 +119,13 @@ build_rootfs debootstrap_release="stable" root_password="0000" hostname="fold" s
       just _build_rootfs {{ debootstrap_release }} {{ root_password }} {{ hostname }} {{ size }}; \
     fi
 
-[group('rootfs')]
-[working-directory('rootfs')]
-install_apt_packages: _mount_rootfs && _unmount_rootfs
-    # Setup locale
-    sudo systemd-nspawn -D {{ _sysroot_dir }} sh -c \
-      "DEBIAN_FRONTEND=noninteractive apt-get -y install locales apt-utils"
-    sudo systemd-nspawn -D {{ _sysroot_dir }} sh -c \
-      "export DEBIAN_FRONTEND=noninteractive; \
-      sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
-      && dpkg-reconfigure locales \
-      && update-locale en_US.UTF-8"
-
-    # Actually install packages
-    sudo systemd-nspawn -D {{ _sysroot_dir }} sh -c \
-      "DEBIAN_FRONTEND=noninteractive apt-get -y install {{ _apt_packages }}"
-
 [private]
 _module_order_path := join(justfile_directory(), "rootfs", "module_order.txt")
 
 # TODO: Download factory image and copy firmware
 [group('rootfs')]
 [working-directory('rootfs')]
-update_kernel_modules_and_source: build_kernel _mount_rootfs && _unmount_rootfs
+update_kernel_modules_and_source: _mount_rootfs && _unmount_rootfs
     sudo mkdir -p {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}
     sudo cp {{ _kernel_build_dir }}/modules.builtin {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/
     sudo cp {{ _kernel_build_dir }}/modules.builtin.modinfo {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/
@@ -232,8 +214,8 @@ create_rootfs_image size="4GiB": _unmount_rootfs
 [working-directory('boot')]
 _create_rootfs_image size="4GiB":
     sudo rm -f {{ _sysroot_img }}
-    sudo {{ _fallocate }} -l {{ size }} {{ _sysroot_img }}
-    sudo {{ _mkfs_btrfs }} {{ _sysroot_img }}
+    sudo fallocate -l {{ size }} {{ _sysroot_img }}
+    sudo mkfs.btrfs {{ _sysroot_img }}
     touch {{ _create_rootfs_sentinel }}
 
 [group('boot')]

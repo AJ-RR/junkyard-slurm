@@ -1,0 +1,62 @@
+# This is the image build action
+
+name: build-image
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push request events, if kernel config has not been updated
+  push:
+    paths-ignore:
+      - "kernel/**"
+  # Or, if it has been, do it after the kernel builds
+  workflow_run:
+    workflows: ["build-kernel"]
+    types: 
+      - completed
+  
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-24.04-arm
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # Download kernel build
+      - name: Download kernel
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          name: kernel
+          path: kernel/out
+          workflow: kernel.yml
+          workflow_conclusion: success
+      # Just in ubuntu is too old, just install prebuilt for now.
+      - name: install deps
+        run: |
+          sudo apt update
+          wget -P /tmp 'http://ftp.us.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb'
+          sudo apt install -y btrfs-progs systemd-container mmdebstrap /tmp/debian-archive-keyring_2025.1_all.deb
+          sudo cp just/just-arm64 /usr/bin/just
+
+      # Runs a set of commands using the runners shell
+      - name: Build image
+        run: |
+          just build_rootfs
+          just update_kernel_modules_and_source
+          just update_initramfs
+          just create_rootfs_image
+          just build_boot_images
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: boot/
