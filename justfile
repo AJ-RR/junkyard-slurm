@@ -100,6 +100,7 @@ _build_rootfs debootstrap_release root_password hostname size:
       --customize-hook='useradd -R "$1" -m -s /bin/bash -G sudo kalm' \
       --customize-hook='echo kalm:0000 | chpasswd -R "$1"' \
       --customize-hook='echo "%sudo ALL=(ALL) NOPASSWD:ALL" >"$1/etc/sudoers.d/99-sudo-nopasswd"' \
+      --customize-hook='cp firstboot.sh "$1/home/kalm/firstboot.sh" && chown 1000:1000 "$1/home/kalm/firstboot.sh" && chmod 755 "$1/home/kalm/firstboot.sh" && echo "~/firstboot.sh" >> "$1/home/kalm/.profile"' \
       --customize-hook="sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \"\$1/etc/locale.gen\" && chroot \"\$1\" dpkg-reconfigure locales && chroot \"\$1\" update-locale en_US.UTF-8" \
       --customize-hook="sed -i \
         -e 's/^#HandleLidSwitch=.*/HandleLidSwitch=ignore/' \
