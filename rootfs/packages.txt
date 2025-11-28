@@ -7,7 +7,6 @@ lz4
 network-manager
 cryptsetup
 vim
-dhcpcd
 build-essential
 fdisk
 zsh
