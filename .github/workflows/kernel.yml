@@ -8,6 +8,8 @@ on:
   push:
     paths:
       - "kernel/**"
+    branches:
+      - "main"
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -21,20 +23,27 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
+      # Speeds up build
+      - name: Speed up build!
+        run: |
+          mkdir a b c
+          sudo mount -t overlay overlay -o lowerdir="$PWD/a",upperdir="$PWD/b",workdir="$PWD/c",volatile "$PWD"
+      
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
       # Just in ubuntu is too old, just install prebuilt for now.
       - name: install deps
         run: |
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt update
-          sudo apt install -y repo
-          sudo cp just/just-x86_64 /usr/bin/just
+          sudo eatmydata apt install -y repo
+          sudo eatmydata cp just/just-x86_64 /usr/bin/just
 
       # Runs a set of commands using the runners shell
       - name: Compile kernel
         run: |
-          just build_kernel
+          eatmydata just build_kernel
       - uses: actions/upload-artifact@v4
         with:
           name: kernel

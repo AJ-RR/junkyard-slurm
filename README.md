@@ -9,6 +9,7 @@ Automated flow for
 For both kernel/image building:
 * [just](https://github.com/casey/just)
 * rsync
+* eatmydata
 
 For only kernel building:
 * [repo](https://source.android.com/docs/setup/download/source-control-tools)
@@ -39,14 +40,15 @@ Add/remove packages in [packages.txt](rootfs/packages.txt). **Specify one packag
 
 ## Building
 ```shell
-just clone_kernel_source
-just build_kernel
-just build_rootfs <debootstrap_release="stable"> <root_password="0000"> <hostname="fold">
-just update_kernel_modules_and_source
-just update_initramfs
-just create_rootfs_image <size="4GiB">
-just build_boot_images
+eatmydata just clone_kernel_source
+eatmydata just build_kernel
+eatmydata just build_rootfs <debootstrap_release="stable"> <root_password="0000"> <hostname="fold">
+eatmydata just update_kernel_modules_and_source
+eatmydata just update_initramfs
+eatmydata just create_rootfs_image <size="4GiB">
+eatmydata just build_boot_images
 ```
+eatmydata will speed things up greatly on any disk I/O bound operations (such as building the image). If you are building this on your own machine (and not on a container/CI environment), it's highly recommended you run `sync` after the build to ensure that all the data is written to disk. If you are on a really slow HDD, you can either build in a tmpfs or an overlay mounted with the volatile option, and then copy all your desired build artifacts to another location.
 
 ## Flashing
 * Flash clean android @ _link_

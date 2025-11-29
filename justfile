@@ -20,11 +20,11 @@ default:
 [working-directory('kernel/source')]
 clone_kernel_source android_kernel_branch="android-gs-felix-6.1-android16":
     @echo "Cloning Android kernel from branch: {{ android_kernel_branch }}"
-    repo init \
+    eatmydata repo init \
       --depth=1 \
       -u https://android.googlesource.com/kernel/manifest \
       -b {{ android_kernel_branch }}
-    repo sync -j {{ num_cpus() }}
+    eatmydata repo sync -j {{ num_cpus() }}
 
 [private]
 _kernel_build_dir := join(justfile_directory(), "kernel", "out")
@@ -34,19 +34,19 @@ _kernel_version := trim(read(join("kernel", "out", "kernel_version")))
 [group('kernel')]
 [working-directory('kernel/source')]
 clean_kernel: clone_kernel_source
-    {{ _bazel }} clean --expunge
+    eatmydata {{ _bazel }} clean --expunge
 
 [group('kernel')]
 [working-directory('kernel/source')]
 build_kernel: clone_kernel_source
-    cp -r ../custom_defconfig_mod .
-    {{ _bazel }} run \
+    eatmydata cp -r ../custom_defconfig_mod .
+    eatmydata {{ _bazel }} run \
       --config=use_source_tree_aosp \
       --config=stamp \
       --config=felix \
       --defconfig_fragment=//custom_defconfig_mod:custom_defconfig \
       //private/devices/google/felix:gs201_felix_dist
-    mv ./out/felix/dist/* ../out/
+    eatmydata mv ./out/felix/dist/* ../out/
     @echo "Updating kernel version string"
     strings {{ join(_kernel_build_dir, "Image") }} \
       | grep "Linux version" \
@@ -67,7 +67,7 @@ _create_rootfs_sentinel := join(justfile_directory(), ".create_rootfs")
 [working-directory('rootfs')]
 _mount_rootfs: _unmount_rootfs
     if [ ! -d {{ _sysroot_dir }} ]; then \
-      mkdir {{ _sysroot_dir }}; \
+      eatmydata mkdir {{ _sysroot_dir }}; \
     fi
     if ! mountpoint -q {{ _sysroot_dir }}; then \
       sudo mount {{ _sysroot_img }} {{ _sysroot_dir }}; \
@@ -88,11 +88,12 @@ clean_rootfs: _unmount_rootfs
 [working-directory('rootfs')]
 _build_rootfs debootstrap_release root_password hostname size:
     # why does debian have this one package in everything BUT trixie...
-    wget -P /tmp 'http://ftp.debian.org/debian/pool/main/k/kmscon/kmscon_9.0.0-5+b2_arm64.deb'
-    sudo DEBIAN_FRONTEND=noninteractive mmdebstrap \
+    eatmydata wget -P /tmp 'http://ftp.debian.org/debian/pool/main/k/kmscon/kmscon_9.0.0-5+b2_arm64.deb'
+    sudo DEBIAN_FRONTEND=noninteractive eatmydata mmdebstrap \
       --variant=standard \
       --arch=arm64 {{ debootstrap_release }} \
-      --include="locales apt-utils {{ _apt_packages }}" \
+      --include="locales apt-utils eatmydata {{ _apt_packages }}" \
+      --hook-dir=/usr/share/mmdebstrap/hooks/eatmydata \
       --include="/tmp/kmscon_9.0.0-5+b2_arm64.deb" \
       --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \
       --customize-hook='echo {{ hostname }} > "$1/etc/hostname"' \
@@ -102,7 +103,7 @@ _build_rootfs debootstrap_release root_password hostname size:
       --customize-hook='echo "%sudo ALL=(ALL) NOPASSWD:ALL" >"$1/etc/sudoers.d/99-sudo-nopasswd"' \
       --customize-hook='cp firstboot.sh "$1/home/kalm/firstboot.sh" && chown 1000:1000 "$1/home/kalm/firstboot.sh" && chmod 755 "$1/home/kalm/firstboot.sh" && echo "~/firstboot.sh" >> "$1/home/kalm/.profile"' \
       --customize-hook='echo "/dev/disk/by-partlabel/super / btrfs defaults,ssd 0 0" > "$1/etc/fstab"' \
-      --customize-hook="sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \"\$1/etc/locale.gen\" && chroot \"\$1\" dpkg-reconfigure locales && chroot \"\$1\" update-locale en_US.UTF-8" \
+      --customize-hook="sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \"\$1/etc/locale.gen\" && chroot \"\$1\" eatmydata dpkg-reconfigure locales && chroot \"\$1\" eatmydata update-locale en_US.UTF-8" \
       --customize-hook="sed -i \
         -e 's/^#HandleLidSwitch=.*/HandleLidSwitch=ignore/' \
         -e 's/^#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=ignore/' \
@@ -129,44 +130,44 @@ _module_order_path := join(justfile_directory(), "rootfs", "module_order.txt")
 [group('rootfs')]
 [working-directory('rootfs')]
 update_kernel_modules_and_source: _mount_rootfs && _unmount_rootfs
-    sudo mkdir -p {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}
-    sudo cp {{ _kernel_build_dir }}/modules.builtin {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/
-    sudo cp {{ _kernel_build_dir }}/modules.builtin.modinfo {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/
+    sudo eatmydata mkdir -p {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}
+    sudo eatmydata cp {{ _kernel_build_dir }}/modules.builtin {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/
+    sudo eatmydata cp {{ _kernel_build_dir }}/modules.builtin.modinfo {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/
 
-    sudo rm -f {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/modules.order
-    sudo touch {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/modules.order
+    sudo eatmydata rm -f {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/modules.order
+    sudo eatmydata touch {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/modules.order
 
     @echo "Copying modules"
     for staging in vendor_dlkm system_dlkm; \
     do \
-      mkdir -p unpack/"$staging" && \
-      tar \
+      eatmydata mkdir -p unpack/"$staging" && \
+      eatmydata tar \
         -xvzf {{ _kernel_build_dir }}/"$staging"_staging_archive.tar.gz \
         -C unpack/"$staging"; \
-      sudo {{ _rsync }} -avK --ignore-existing  --include='*/' --include='*.ko' --exclude='*' unpack/"$staging"/ {{ _sysroot_dir }}/; \
-      sudo sh -c "cat unpack/\"$staging\"/lib/modules/{{ _kernel_version }}/modules.order \
+      sudo eatmydata {{ _rsync }} -avK --ignore-existing  --include='*/' --include='*.ko' --exclude='*' unpack/"$staging"/ {{ _sysroot_dir }}/; \
+      sudo eatmydata sh -c "cat unpack/\"$staging\"/lib/modules/{{ _kernel_version }}/modules.order \
         >> {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/modules.order"; \
     done
 
     @echo "Updating System.map"
-    sudo cp {{ _kernel_build_dir }}/System.map {{ _sysroot_dir }}/boot/System.map-{{ _kernel_version }}
+    sudo eatmydata cp {{ _kernel_build_dir }}/System.map {{ _sysroot_dir }}/boot/System.map-{{ _kernel_version }}
 
     @echo "Updating module dependencies"
-    sudo systemd-nspawn -D {{ _sysroot_dir }} depmod \
+    sudo eatmydata systemd-nspawn -D {{ _sysroot_dir }} eatmydata depmod \
       --errsyms \
       --all \
       --filesyms /boot/System.map-{{ _kernel_version }} \
       {{ _kernel_version }}
 
     @echo "Copying kernel headers"
-    mkdir -p unpack/kernel_headers
-    tar \
+    eatmydata mkdir -p unpack/kernel_headers
+    eatmydata tar \
       -xvzf {{ _kernel_build_dir }}/kernel-headers.tar.gz \
       -C unpack/kernel_headers
-    sudo cp -r unpack/kernel_headers {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }}
-    sudo ln -rsf {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }} {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/build
-    sudo cp {{ _kernel_build_dir }}/kernel_aarch64_Module.symvers {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }}/
-    sudo cp {{ _kernel_build_dir }}/vmlinux.symvers {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }}/
+    sudo eatmydata cp -r unpack/kernel_headers {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }}
+    sudo eatmydata ln -rsf {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }} {{ _sysroot_dir }}/lib/modules/{{ _kernel_version }}/build
+    sudo eatmydata cp {{ _kernel_build_dir }}/kernel_aarch64_Module.symvers {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }}/
+    sudo eatmydata cp {{ _kernel_build_dir }}/vmlinux.symvers {{ _sysroot_dir }}/usr/src/linux-headers-{{ _kernel_version }}/
 
     @echo "Setting systemd module load order"
     rm -f {{ _module_order_path }}
@@ -197,7 +198,7 @@ _module_order := replace(read(_module_order_path), "\n", " ")
 [group('rootfs')]
 [working-directory('rootfs')]
 update_initramfs: _mount_rootfs && _unmount_rootfs
-    sudo systemd-nspawn -D {{ _sysroot_dir }} dracut \
+    sudo eatmydata systemd-nspawn -D {{ _sysroot_dir }} eatmydata dracut \
       --kver {{ _kernel_version }} \
       --lz4 \
       --show-modules \
@@ -216,15 +217,15 @@ create_rootfs_image size="4GiB": _unmount_rootfs
 [group('rootfs')]
 [working-directory('boot')]
 _create_rootfs_image size="4GiB":
-    sudo rm -f {{ _sysroot_img }}
-    sudo fallocate -l {{ size }} {{ _sysroot_img }}
-    sudo mkfs.btrfs {{ _sysroot_img }}
+    sudo eatmydata rm -f {{ _sysroot_img }}
+    sudo eatmydata fallocate -l {{ size }} {{ _sysroot_img }}
+    sudo eatmydata mkfs.btrfs {{ _sysroot_img }}
     touch {{ _create_rootfs_sentinel }}
 
 [group('boot')]
 [working-directory('boot')]
 build_boot_images: _mount_rootfs && _unmount_rootfs
-    sudo {{ _mkbootimg }} \
+    sudo eatmydata {{ _mkbootimg }} \
       --kernel {{ _kernel_build_dir }}/Image.lz4 \
       --cmdline "root=/dev/disk/by-partlabel/super" \
       --header_version 4 \
@@ -233,7 +234,7 @@ build_boot_images: _mount_rootfs && _unmount_rootfs
       --os_version 15.0.0 \
       --os_patch_level 2025-02
 
-    sudo {{ _mkbootimg }} \
+    sudo eatmydata {{ _mkbootimg }} \
       --ramdisk_name "" \
       --vendor_ramdisk_fragment {{ _initramfs_path }} \
       --dtb {{ _kernel_build_dir }}/dtb.img \

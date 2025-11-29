@@ -8,6 +8,8 @@ on:
   push:
     paths-ignore:
       - "kernel/**"
+    branches:
+      - "main"
   # Or, if it has been, do it after the kernel builds
   workflow_run:
     workflows: ["build-kernel"]
@@ -26,10 +28,22 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
+      - name: Speed up build!
+        run: sudo mount -t tmpfs -osize=10G workspace $GITHUB_WORKSPACE
+      
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      # Just in ubuntu is too old, just install prebuilt for now.
+      - name: install deps
+        run: |
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt update
+          eatmydata wget 'http://ftp.us.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb'
+          sudo eatmydata apt install -y btrfs-progs systemd-container mmdebstrap $GITHUB_WORKSPACE/debian-archive-keyring_2025.1_all.deb
+          sudo eatmydata cp just/just-arm64 /usr/bin/just
 
       # Download kernel build
       - name: Download kernel
@@ -39,22 +53,15 @@ jobs:
           path: kernel/out
           workflow: kernel.yml
           workflow_conclusion: success
-      # Just in ubuntu is too old, just install prebuilt for now.
-      - name: install deps
-        run: |
-          sudo apt update
-          wget -P /tmp 'http://ftp.us.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb'
-          sudo apt install -y btrfs-progs systemd-container mmdebstrap /tmp/debian-archive-keyring_2025.1_all.deb
-          sudo cp just/just-arm64 /usr/bin/just
 
       # Runs a set of commands using the runners shell
       - name: Build image
         run: |
-          just build_rootfs
-          just update_kernel_modules_and_source
-          just update_initramfs
-          just create_rootfs_image
-          just build_boot_images
+          eatmydata just build_rootfs
+          eatmydata just update_kernel_modules_and_source
+          eatmydata just update_initramfs
+          eatmydata just create_rootfs_image
+          eatmydata just build_boot_images
 
       - uses: actions/upload-artifact@v4
         with:
