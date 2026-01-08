@@ -20,3 +20,6 @@ sudo
 btrfs-progs
 tmux
 adbd
+avahi-daemon
+avahi-utils
+libnss-mdns
