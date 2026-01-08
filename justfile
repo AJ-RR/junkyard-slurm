@@ -76,12 +76,11 @@ clean_rootfs:
 [working-directory('rootfs')]
 _build_rootfs debootstrap_release root_password hostname size:
     # why does debian have this one package in everything BUT trixie...
-    eatmydata wget -P /tmp 'http://ftp.debian.org/debian/pool/main/k/kmscon/kmscon_9.0.0-5+b2_arm64.deb'
     sudo DEBIAN_FRONTEND=noninteractive eatmydata mmdebstrap \
       --variant=standard \
       --arch=arm64 {{ debootstrap_release }} \
       --keyring=/usr/share/keyrings/debian-archive-keyring.gpg \
-      --include="locales apt-utils eatmydata {{ _apt_packages }}" \
+      --include="locales apt-utils eatmydata kmscon {{ _apt_packages }}" \
       --hook-dir=/usr/share/mmdebstrap/hooks/eatmydata \
       --include="/tmp/kmscon_9.0.0-5+b2_arm64.deb" \
       --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \
@@ -208,10 +207,10 @@ create_rootfs_image size="4GiB":
 [group('rootfs')]
 [working-directory('boot')]
 _create_rootfs_image size="4GiB":
-    sudo eatmydata rm -f {{ _sysroot_img }}
-    sudo eatmydata fallocate -l {{ size }} {{ _sysroot_img }}
-    sudo eatmydata rm -rf --one-file-system {{ _sysroot_dir }}
-    eatmydata mkdir {{ _sysroot_dir }}
+    sudo rm -f {{ _sysroot_img }}
+    sudo fallocate -l {{ size }} {{ _sysroot_img }}
+    sudo rm -rf --one-file-system {{ _sysroot_dir }}
+    mkdir {{ _sysroot_dir }}
     touch {{ _create_rootfs_sentinel }}
 
 [group('boot')]
