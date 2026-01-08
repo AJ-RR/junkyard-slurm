@@ -57,9 +57,9 @@ jobs:
       # Runs a set of commands using the runners shell
       - name: Build image
         run: |
-          eatmydata just create_rootfs_image
-          eatmydata just build_rootfs
-          eatmydata just build_boot_images
+          just create_rootfs_image
+          just build_rootfs
+          just build_boot_images
 
       - uses: actions/upload-artifact@v4
         with:
