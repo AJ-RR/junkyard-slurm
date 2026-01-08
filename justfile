@@ -76,14 +76,12 @@ clean_rootfs:
 [working-directory('rootfs')]
 _build_rootfs debootstrap_release root_password hostname size:
     # why does debian have this one package in everything BUT trixie...
-    wget -O /tmp/kmscon.deb 'https://snapshot.debian.org/archive/debian/20230130T154611Z/pool/main/k/kmscon/kmscon_9.0.0-5%2Bb2_arm64.deb'
     sudo DEBIAN_FRONTEND=noninteractive eatmydata mmdebstrap \
       --variant=standard \
       --arch=arm64 {{ debootstrap_release }} \
       --keyring=/usr/share/keyrings/debian-archive-keyring.gpg \
       --include="locales apt-utils eatmydata {{ _apt_packages }}" \
       --hook-dir=/usr/share/mmdebstrap/hooks/eatmydata \
-      --include="/tmp/kmscon.deb" \
       --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \
       --customize-hook='tar-in {{ _kernel_tar }} /' \
       --customize-hook='echo {{ hostname }} > "$1/etc/hostname"' \
@@ -99,7 +97,6 @@ _build_rootfs debootstrap_release root_password hostname size:
         -e 's/^#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=ignore/' \
         -e 's/^#HandleLidSwitchDocked=.*/HandleLidSwitchDocked=ignore/' \
         \"\$1/etc/systemd/logind.conf\"" \
-      --customize-hook='mkdir -p "$1/etc/systemd/system/kmsconvt@.service.d" && printf "[Service]\nExecStart=\nExecStart=/usr/bin/kmscon \"--vt=%%I\" --seats=seat0 --no-switchvt --login -- /sbin/agetty -a kalm - xterm-256color\n" > "$1/etc/systemd/system/kmsconvt@.service.d/override.conf"' \
       --customize-hook='mkdir -p "$1/etc/systemd/system/adbd.service.d" && printf "[Unit]\nWants=sys-kernel-config.mount\nAfter=\n\n[Service]\nSocketBindDeny=tcp:5555\n" > "$1/etc/systemd/system/adbd.service.d/override.conf"' \
       --customize-hook='ln -s /dev/null "$1/etc/systemd/system/systemd-backlight@.service"' \
       --customize-hook='chroot "$1" dracut --kver {{ _kernel_version }} --show-modules --force' \
