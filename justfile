@@ -80,6 +80,7 @@ _build_rootfs debootstrap_release root_password hostname size:
     sudo DEBIAN_FRONTEND=noninteractive eatmydata mmdebstrap \
       --variant=standard \
       --arch=arm64 {{ debootstrap_release }} \
+      --keyring=/usr/share/keyrings/debian-archive-keyring.gpg \
       --include="locales apt-utils eatmydata {{ _apt_packages }}" \
       --hook-dir=/usr/share/mmdebstrap/hooks/eatmydata \
       --include="/tmp/kmscon_9.0.0-5+b2_arm64.deb" \
