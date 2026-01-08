@@ -76,12 +76,14 @@ clean_rootfs:
 [working-directory('rootfs')]
 _build_rootfs debootstrap_release root_password hostname size:
     # why does debian have this one package in everything BUT trixie...
+    wget -O /tmp/kmscon.deb 'https://snapshot.debian.org/archive/debian/20230130T154611Z/pool/main/k/kmscon/kmscon_9.0.0-5%2Bb2_arm64.deb'
     sudo DEBIAN_FRONTEND=noninteractive eatmydata mmdebstrap \
       --variant=standard \
       --arch=arm64 {{ debootstrap_release }} \
       --keyring=/usr/share/keyrings/debian-archive-keyring.gpg \
-      --include="locales apt-utils eatmydata kmscon {{ _apt_packages }}" \
+      --include="locales apt-utils eatmydata {{ _apt_packages }}" \
       --hook-dir=/usr/share/mmdebstrap/hooks/eatmydata \
+      --include="/tmp/kmscon.deb" \
       --hook-dir=/usr/share/mmdebstrap/hooks/file-mirror-automount \
       --customize-hook='tar-in {{ _kernel_tar }} /' \
       --customize-hook='echo {{ hostname }} > "$1/etc/hostname"' \
